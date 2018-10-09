@@ -1,0 +1,190 @@
+global arenaWidth
+global arenaHeight
+global shipRadius
+global bullets
+global bulletTimer
+global bulletRadius
+global asteroidStages
+global asteroids
+global shipX
+global turnSpeed
+global shipY
+global shipAngle
+global shipSpeedX
+global shipSpeedY
+
+def conf(t) {
+	t.window.width = 800
+	t.window.height = 600
+}
+
+class Bullet {
+	def Bullet(x, y, angle, timeLeft) {
+		this.x = x
+		this.y = y
+		this.angle = angle
+		this.timeLeft = timeLeft
+	}
+}
+
+class AsteroidStage {
+	def AsteroidStage(speed, radius) {
+		this.speed = speed
+		this.radius = radius
+	}
+}
+
+class Asteroid {
+	def Asteroid(x, y, angle, stage) {
+		this.x = x
+		this.y = y
+		this.angle = angle
+		this.stage = stage
+	}
+}
+
+def load() {
+	arenaWidth = 800.0f
+	arenaHeight = 600.0f
+	turnSpeed = 10.0f
+	shipRadius = 30.0f
+	bulletRadius = 5.0f
+
+	// Stages
+	asteroidStages = []
+	asteroidStages.push_back(AsteroidStage(120.0f, 15.0f))
+	asteroidStages.push_back(AsteroidStage(70.0f, 30.0f))
+	asteroidStages.push_back(AsteroidStage(50.0f, 50.0f))
+	asteroidStages.push_back(AsteroidStage(20.0f, 80.0f))
+
+	// Asteroids
+	asteroids = []
+
+	reset()
+}
+
+def reset() {
+	shipX = arenaWidth / 2.0f
+	shipY = arenaHeight / 2.0f
+	shipAngle = 0.0f
+	shipSpeedX = 0.0f
+	shipSpeedY = 0.0f
+
+	bullets = []
+	bulletTimer = 0.0f
+
+	asteroids.clear()
+	asteroids.push_back(Asteroid(100.0f, 100.0f, 0.0f, 0))
+	asteroids.push_back(Asteroid(arenaWidth - 100.0f, 100.0f, 0.0f, 0))
+	asteroids.push_back(Asteroid(arenaWidth / 2.0f, arenaHeight - 100.0f, 0.0f, 0))
+
+	for (asteroid : asteroids) {
+		asteroid.angle = love.math.random() * (2.0f * love.math.pi)
+		asteroid.stage = 3
+	}
+}
+
+def areCirclesIntersecting(aX, aY, aRadius, bX, bY, bRadius){
+	var x = pow(aX - bX, 2.0f)
+	var y = pow(aY - bY, 2.0f)
+	return x + y <= pow(aRadius + bRadius, 2.0f)
+}
+
+def mod(x, y) {
+	return x - y * floor(x / y)
+}
+
+def update(dt) {
+	if (love.keyboard.isDown("right")) {
+		shipAngle = mod(shipAngle + turnSpeed * dt, 2.0f * love.math.pi)
+	}
+
+	if (love.keyboard.isDown("left")) {
+		shipAngle = mod(shipAngle - turnSpeed * dt, 2.0f * love.math.pi)
+	}
+
+	if (love.keyboard.isDown("up")) {
+		var shipSpeed = 100.0f
+		shipSpeedX = shipSpeedX + cos(shipAngle) * shipSpeed * dt
+		shipSpeedY = shipSpeedY + sin(shipAngle) * shipSpeed * dt
+	}
+
+	shipX = mod(shipX + shipSpeedX * dt, arenaWidth)
+	shipY = mod(shipY + shipSpeedY * dt, arenaHeight)
+
+	for (var bulletIndex = 0; bulletIndex < bullets.size(); ++bulletIndex) {
+		var bullet = bullets[bulletIndex]
+		bullets[bulletIndex].timeLeft = bullet.timeLeft - dt
+		if (bullet.timeLeft <= 0.0f) {
+			bullets.erase_at(bulletIndex)
+			break
+		} else {
+			var bulletSpeed = 500.0f
+			bullets[bulletIndex].x = mod(bullet.x + cos(bullet.angle) * bulletSpeed * dt, arenaWidth)
+			bullets[bulletIndex].y = mod(bullet.y + sin(bullet.angle) * bulletSpeed * dt, arenaHeight)
+		}
+
+		for (var asteroidIndex = 0; asteroidIndex < asteroids.size(); ++asteroidIndex) {
+			var asteroid = asteroids[asteroidIndex]
+
+			if (areCirclesIntersecting(bullet.x, bullet.y, bulletRadius, asteroid.x, asteroid.y, asteroidStages[asteroid.stage].radius)) {
+				bullets.erase_at(bulletIndex)
+				asteroids.erase_at(asteroidIndex)
+
+				if (asteroid.stage > 0) {
+					var angle1 = love.math.random(0.0f, 1.0f) * (2.0f * love.math.pi)
+					var angle2 = mod(angle1 - love.math.pi, 2.0f * love.math.pi)
+
+					asteroids.push_back(Asteroid(asteroid.x, asteroid.y, angle1, asteroid.stage - 1))
+					asteroids.push_back(Asteroid(asteroid.x, asteroid.y, angle2, asteroid.stage - 1))
+				}
+				break
+			}
+		}
+	}
+
+	bulletTimer = bulletTimer + dt
+
+	if (love.keyboard.isDown("x")) {
+		if (bulletTimer >= 0.5) {
+			bulletTimer = 0.0f
+
+			bullets.push_back(Bullet(shipX + cos(shipAngle) * shipRadius, shipY + sin(shipAngle) * shipRadius, shipAngle, 1.0f))
+		}
+	}
+
+	for (asteroid : asteroids) {
+		asteroid.x = mod(asteroid.x + cos(asteroid.angle) * asteroidStages[asteroid.stage].speed * dt, arenaWidth)
+		asteroid.y = mod(asteroid.y + sin(asteroid.angle) * asteroidStages[asteroid.stage].speed * dt, arenaHeight)
+
+		if (areCirclesIntersecting(shipX, shipY, shipRadius, asteroid.x, asteroid.y, asteroidStages[asteroid.stage].radius)) {
+			reset()
+			return
+		}
+	}
+
+	if (asteroids.size() == 0) {
+		reset()
+	}
+}
+
+def draw() {
+	love.graphics.setColor(0, 0, 255)
+	love.graphics.circle("fill", shipX, shipY, shipRadius)
+
+
+	love.graphics.setColor(0, 255, 255)
+	var shipCircleDistance = 20.0f
+	love.graphics.circle("fill", shipX + cos(shipAngle) * shipCircleDistance, shipY + sin(shipAngle) * shipCircleDistance, 5)
+
+	for (bullet : bullets) {
+		love.graphics.setColor(0, 255, 0)
+		love.graphics.circle("fill", bullet.x, bullet.y, bulletRadius)
+	}
+
+
+	for (asteroid : asteroids) {
+		love.graphics.setColor(255, 255, 0)
+		love.graphics.circle("fill", asteroid.x, asteroid.y, asteroidStages[asteroid.stage].radius)
+	}
+}
